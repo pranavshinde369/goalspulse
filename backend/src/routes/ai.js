@@ -27,5 +27,27 @@ Example: ["Goal 1 text", "Goal 2 text", "Goal 3 text"]`
     res.status(500).json({ error: e.message })
   }
 })
+router.post('/appraisal-summary', authenticate, async (req, res) => {
+  try {
+    const { employeeName, goals } = req.body
+    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' })
 
+    const goalSummary = goals.map(g =>
+      `- ${g.title} (${g.thrustArea}, ${g.uomType}, target: ${g.target}, progress: ${g.progressPct != null ? Math.round(g.progressPct)+'%' : 'not started'}, status: ${g.status})`
+    ).join('\n')
+
+    const prompt = `You are an HR performance management expert writing a professional appraisal summary.
+Employee: ${employeeName}
+Goals this year:
+${goalSummary}
+
+Write a concise 3-sentence appraisal summary covering: overall performance, key achievements, and one area for growth.
+Be professional, specific, and encouraging. Use the employee's name. Return only the summary, no headings.`
+
+    const result = await model.generateContent(prompt)
+    res.json({ summary: result.response.text().trim() })
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
 module.exports = router
