@@ -1,0 +1,91 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  EMPLOYEE
+  MANAGER
+  ADMIN
+}
+
+enum GoalStatus {
+  DRAFT
+  SUBMITTED
+  APPROVED
+  REJECTED
+  LOCKED
+}
+
+enum UoMType {
+  MIN
+  MAX
+  TIMELINE
+  ZERO
+}
+
+model User {
+  id         String     @id @default(uuid())
+  name       String
+  email      String     @unique
+  password   String
+  role       Role       @default(EMPLOYEE)
+  managerId  String?
+  manager    User?      @relation("Reports", fields: [managerId], references: [id])
+  reports    User[]     @relation("Reports")
+  goals      Goal[]
+  checkIns   CheckIn[]
+  auditLogs  AuditLog[]
+  createdAt  DateTime   @default(now())
+}
+
+model Goal {
+  id           String     @id @default(uuid())
+  userId       String
+  user         User       @relation(fields: [userId], references: [id])
+  thrustArea   String
+  title        String
+  description  String
+  uomType      UoMType
+  target       Float
+  weightage    Float
+  status       GoalStatus @default(DRAFT)
+  isShared     Boolean    @default(false)
+  parentGoalId String?
+  actual       Float?
+  progressPct  Float?
+  lockedAt     DateTime?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  checkIns     CheckIn[]
+  auditLogs    AuditLog[]
+}
+
+model CheckIn {
+  id        String   @id @default(uuid())
+  goalId    String
+  goal      Goal     @relation(fields: [goalId], references: [id])
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  quarter   Int
+  actual    Float
+  status    String
+  comment   String?
+  createdAt DateTime @default(now())
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  goalId    String
+  goal      Goal     @relation(fields: [goalId], references: [id])
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  action    String
+  before    Json?
+  after     Json?
+  createdAt DateTime @default(now())
+}
