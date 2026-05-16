@@ -2,6 +2,9 @@ const express = require('express')
 const cors = require('cors')
 require('dotenv').config()
 
+const aiRoutes = require('./routes/ai')
+
+
 const authRoutes = require('./routes/auth')
 const goalRoutes = require('./routes/goals')
 const adminRoutes = require('./routes/admin')
@@ -9,7 +12,7 @@ const adminRoutes = require('./routes/admin')
 const app = express()
 app.use(cors())
 app.use(express.json())
-
+app.use('/api/ai', aiRoutes)
 app.use('/api/auth', authRoutes)
 app.use('/api/goals', goalRoutes)
 app.use('/api/admin', adminRoutes)
