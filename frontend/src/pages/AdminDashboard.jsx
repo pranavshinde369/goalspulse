@@ -1,3 +1,371 @@
+import { useState, useEffect, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
+import api from '../lib/api'
+import { useToast } from '../components/Toast'
+
 export default function AdminDashboard() {
-  return <div style={{padding:'2rem'}}>Admin Dashboard - Coming Soon</div>
+  const [users, setUsers] = useState([])
+  const [auditLogs, setAuditLogs] = useState([])
+  const [activeTab, setActiveTab] = useState('overview')
+  const [aiSummary, setAiSummary] = useState({})
+  const [aiLoading, setAiLoading] = useState(null)
+  const [resetting, setResetting] = useState(false)
+  const chartRef = useRef(null)
+  const chartInstance = useRef(null)
+  const navigate = useNavigate()
+  const toast = useToast()
+  const user = JSON.parse(localStorage.getItem('user'))
+
+  useEffect(() => {
+    fetchUsers()
+    fetchAudit()
+    loadChartJS()
+  }, [])
+
+  useEffect(() => {
+    if (activeTab === 'overview' && users.length > 0 && window.Chart) {
+      setTimeout(drawChart, 150)
+    }
+  }, [activeTab, users])
+
+  const loadChartJS = () => {
+    if (window.Chart) return
+    const script = document.createElement('script')
+    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js'
+    script.onload = () => { if (users.length > 0) setTimeout(drawChart, 150) }
+    document.head.appendChild(script)
+  }
+
+  const fetchUsers = async () => {
+    try {
+      const res = await api.get('/admin/users')
+      setUsers(res.data)
+    } catch (e) { toast('Failed to load users', 'error') }
+  }
+
+  const fetchAudit = async () => {
+    try {
+      const res = await api.get('/admin/audit')
+      setAuditLogs(res.data)
+    } catch (e) { console.error(e) }
+  }
+
+  const drawChart = () => {
+    const canvas = chartRef.current
+    if (!canvas || !window.Chart) return
+    if (chartInstance.current) chartInstance.current.destroy()
+    const allGoals = users.flatMap(u => u.goals || [])
+    const areas = {}
+    allGoals.forEach(g => {
+      if (!areas[g.thrustArea]) areas[g.thrustArea] = 0
+      if (g.status === 'LOCKED') areas[g.thrustArea]++
+    })
+    const labels = Object.keys(areas)
+    const data = labels.map(l => areas[l])
+    const colors = ['#2563eb', '#7c3aed', '#16a34a', '#ca8a04', '#dc2626', '#0891b2', '#db2777', '#65a30d']
+    chartInstance.current = new window.Chart(canvas.getContext('2d'), {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [{ label: 'Locked Goals', data, backgroundColor: colors.slice(0, labels.length), borderRadius: 6, borderSkipped: false }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          y: { beginAtZero: true, ticks: { stepSize: 1 }, grid: { color: '#f3f4f6' } },
+          x: { grid: { display: false } }
+        }
+      }
+    })
+  }
+
+  const generateSummary = async (u) => {
+    setAiLoading(u.id)
+    try {
+      const res = await api.post('/ai/appraisal-summary', { employeeName: u.name, goals: u.goals })
+      setAiSummary(prev => ({ ...prev, [u.id]: res.data.summary }))
+      toast('Appraisal summary generated!', 'success')
+    } catch (e) { toast('AI summary failed — check Gemini API key', 'error') }
+    finally { setAiLoading(null) }
+  }
+
+  const handleExport = async () => {
+    try {
+      const token = localStorage.getItem('token')
+      const res = await fetch('http://localhost:4000/api/admin/report', {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+      const blob = await res.blob()
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url; a.download = 'achievement_report.xlsx'
+      document.body.appendChild(a); a.click(); a.remove()
+      toast('Report downloaded!', 'success')
+    } catch (e) { toast('Export failed', 'error') }
+  }
+
+  const handleReset = async () => {
+    if (!window.confirm('Reset all goals and check-ins? Users will be kept.')) return
+    setResetting(true)
+    try {
+      await api.post('/admin/reset-demo')
+      toast('Demo reset! Fresh start ready.', 'info')
+      fetchUsers(); fetchAudit()
+    } catch (e) { toast('Reset failed', 'error') }
+    finally { setResetting(false) }
+  }
+
+  const logout = () => { localStorage.clear(); navigate('/login') }
+
+  const statusColor = { DRAFT: '#6b7280', SUBMITTED: '#2563eb', APPROVED: '#16a34a', REJECTED: '#dc2626', LOCKED: '#7c3aed' }
+  const allGoals = users.flatMap(u => u.goals || [])
+  const lockedGoals = allGoals.filter(g => g.status === 'LOCKED').length
+  const submittedGoals = allGoals.filter(g => g.status === 'SUBMITTED').length
+  const draftGoals = allGoals.filter(g => g.status === 'DRAFT').length
+  const completionRate = users.length > 0
+    ? Math.round((users.filter(u => (u.goals || []).some(g => g.status === 'LOCKED')).length / users.length) * 100)
+    : 0
+
+  return (
+    <div style={s.page}>
+      <div style={s.header}>
+        <div>
+          <div style={s.headerTitle}>GoalsPulse</div>
+          <div style={s.headerSub}>Welcome, {user?.name} · Admin</div>
+        </div>
+        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+          <button style={s.btnExport} onClick={handleExport}>⬇ Export Report</button>
+          <button style={{ ...s.btnSecondary, color: '#dc2626', borderColor: '#fca5a5' }}
+            onClick={handleReset} disabled={resetting}>
+            {resetting ? 'Resetting...' : '🔄 Reset Demo'}
+          </button>
+          <button style={s.btnSecondary} onClick={logout}>Logout</button>
+        </div>
+      </div>
+
+      <div style={s.body}>
+        <div style={s.statsRow}>
+          <div style={s.statCard}><div style={s.statVal}>{users.length}</div><div style={s.statLabel}>Employees</div></div>
+          <div style={s.statCard}><div style={s.statVal}>{allGoals.length}</div><div style={s.statLabel}>Total Goals</div></div>
+          <div style={s.statCard}><div style={{ ...s.statVal, color: '#7c3aed' }}>{lockedGoals}</div><div style={s.statLabel}>Locked</div></div>
+          <div style={s.statCard}><div style={{ ...s.statVal, color: '#2563eb' }}>{submittedGoals}</div><div style={s.statLabel}>Pending</div></div>
+          <div style={s.statCard}><div style={{ ...s.statVal, color: '#16a34a' }}>{completionRate}%</div><div style={s.statLabel}>Completion</div></div>
+        </div>
+
+        <div style={s.tabs}>
+          {[
+            { id: 'overview', label: '📊 Overview' },
+            { id: 'goals', label: '🎯 All Goals' },
+            { id: 'users', label: '👥 Users' },
+            { id: 'audit', label: '🔍 Audit Trail' },
+          ].map(tab => (
+            <button key={tab.id}
+              style={{ ...s.tab, ...(activeTab === tab.id ? s.tabActive : {}) }}
+              onClick={() => setActiveTab(tab.id)}>
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        {/* OVERVIEW */}
+        {activeTab === 'overview' && (
+          <>
+            <div style={s.grid3}>
+              <div style={{ ...s.statCard, textAlign: 'left' }}>
+                <div style={{ fontSize: '13px', color: '#6b7280', marginBottom: '4px' }}>Draft</div>
+                <div style={{ fontSize: '28px', fontWeight: '600', color: '#6b7280' }}>{draftGoals}</div>
+              </div>
+              <div style={{ ...s.statCard, textAlign: 'left' }}>
+                <div style={{ fontSize: '13px', color: '#6b7280', marginBottom: '4px' }}>Submitted</div>
+                <div style={{ fontSize: '28px', fontWeight: '600', color: '#2563eb' }}>{submittedGoals}</div>
+              </div>
+              <div style={{ ...s.statCard, textAlign: 'left' }}>
+                <div style={{ fontSize: '13px', color: '#6b7280', marginBottom: '4px' }}>Locked</div>
+                <div style={{ fontSize: '28px', fontWeight: '600', color: '#7c3aed' }}>{lockedGoals}</div>
+              </div>
+            </div>
+
+            <div style={s.chartCard}>
+              <div style={s.sectionTitle}>Locked goals by thrust area</div>
+              <div style={{ height: '200px', position: 'relative' }}>
+                <canvas ref={chartRef} />
+              </div>
+            </div>
+
+            <div style={s.sectionTitle}>Employee progress</div>
+            {users.map(u => {
+              const uGoals = u.goals || []
+              const locked = uGoals.filter(g => g.status === 'LOCKED').length
+              const withProgress = uGoals.filter(g => g.progressPct != null)
+              const avgProgress = withProgress.length > 0
+                ? Math.round(withProgress.reduce((a, g) => a + g.progressPct, 0) / withProgress.length)
+                : null
+              const pct = uGoals.length > 0 ? Math.round((locked / uGoals.length) * 100) : 0
+
+              return (
+                <div key={u.id} style={s.userRow}>
+                  <div style={s.avatar}>{u.name[0]}</div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px', alignItems: 'center' }}>
+                      <span style={{ fontSize: '14px', fontWeight: '500', color: '#1a1a1a' }}>{u.name}</span>
+                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                        {avgProgress != null && <span style={{ fontSize: '12px', color: '#7c3aed', fontWeight: '500' }}>avg {avgProgress}%</span>}
+                        <span style={{ fontSize: '12px', color: '#6b7280' }}>{locked}/{uGoals.length} locked</span>
+                      </div>
+                    </div>
+                    <div style={s.progressBg}>
+                      <div style={{ ...s.progressFill, width: `${pct}%`, background: pct === 100 ? '#16a34a' : pct > 50 ? '#ca8a04' : '#2563eb' }} />
+                    </div>
+                    <div style={{ display: 'flex', gap: '5px', marginTop: '6px', flexWrap: 'wrap' }}>
+                      {uGoals.map(g => (
+                        <span key={g.id} style={{ fontSize: '11px', padding: '1px 6px', borderRadius: '4px', background: statusColor[g.status] + '20', color: statusColor[g.status] }}>
+                          {g.title.slice(0, 14)}{g.title.length > 14 ? '…' : ''} · {g.status}
+                        </span>
+                      ))}
+                    </div>
+                    <div style={{ marginTop: '8px' }}>
+                      <button style={{ ...s.btnAI, opacity: aiLoading === u.id ? 0.7 : 1 }}
+                        onClick={() => generateSummary(u)} disabled={aiLoading === u.id}>
+                        {aiLoading === u.id ? '⏳ Generating...' : '✨ Generate Appraisal Summary'}
+                      </button>
+                      {aiSummary[u.id] && (
+                        <div style={{ marginTop: '8px', padding: '10px 12px', background: '#f5f3ff', border: '1px solid #ddd6fe', borderRadius: '8px', fontSize: '13px', color: '#5b21b6', lineHeight: '1.6' }}>
+                          {aiSummary[u.id]}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+          </>
+        )}
+
+        {/* ALL GOALS */}
+        {activeTab === 'goals' && (
+          <>
+            <div style={s.sectionTitle}>All goals</div>
+            <div style={{ overflowX: 'auto' }}>
+              <table style={s.table}>
+                <thead>
+                  <tr style={s.thead}>
+                    {['Employee', 'Goal', 'Thrust Area', 'UoM', 'Target', 'Actual', 'Progress', 'Weightage', 'Status'].map(h => (
+                      <th key={h} style={s.th}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {users.flatMap(u => (u.goals || []).map(g => (
+                    <tr key={g.id} style={s.tr}>
+                      <td style={s.td}>{u.name}</td>
+                      <td style={s.td}>{g.title}</td>
+                      <td style={s.td}>{g.thrustArea}</td>
+                      <td style={s.td}>{g.uomType}</td>
+                      <td style={s.td}>{g.target}</td>
+                      <td style={s.td}>{g.actual ?? '—'}</td>
+                      <td style={s.td}>{g.progressPct != null ? `${Math.round(g.progressPct)}%` : '—'}</td>
+                      <td style={s.td}>{g.weightage}%</td>
+                      <td style={s.td}>
+                        <span style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '10px', background: statusColor[g.status] + '20', color: statusColor[g.status], fontWeight: '500' }}>
+                          {g.status}
+                        </span>
+                      </td>
+                    </tr>
+                  )))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+
+        {/* USERS */}
+        {activeTab === 'users' && (
+          <>
+            <div style={s.sectionTitle}>All users</div>
+            {users.map(u => (
+              <div key={u.id} style={s.memberCard}>
+                <div style={s.avatar}>{u.name[0]}</div>
+                <div>
+                  <div style={{ fontSize: '15px', fontWeight: '500', color: '#1a1a1a' }}>{u.name}</div>
+                  <div style={{ fontSize: '13px', color: '#6b7280' }}>{u.email}</div>
+                  <div style={{ marginTop: '4px', display: 'flex', gap: '6px' }}>
+                    <span style={{ ...s.chip, background: '#dbeafe', color: '#1d4ed8' }}>{u.role}</span>
+                    <span style={{ ...s.chip, background: '#f3f4f6', color: '#6b7280' }}>{(u.goals || []).length} goals</span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </>
+        )}
+
+        {/* AUDIT TRAIL */}
+        {activeTab === 'audit' && (
+          <>
+            <div style={s.sectionTitle}>Audit trail</div>
+            {auditLogs.length === 0 && (
+              <div style={s.empty}>
+                <div style={{ fontSize: '24px', marginBottom: '8px' }}>🔍</div>
+                <div style={{ fontWeight: '500', marginBottom: '4px' }}>No audit events yet</div>
+                <div style={{ fontSize: '13px' }}>Audit logs appear when locked goals are modified by admin.</div>
+              </div>
+            )}
+            {auditLogs.map(log => (
+              <div key={log.id} style={s.auditRow}>
+                <div style={s.auditDot} />
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: '13px', fontWeight: '500', color: '#1a1a1a' }}>
+                    {log.user?.name} · <span style={{ color: '#7c3aed' }}>{log.action}</span>
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#6b7280', marginTop: '2px' }}>
+                    Goal: {log.goal?.title} · {new Date(log.createdAt).toLocaleString()}
+                  </div>
+                  {log.before && (
+                    <div style={{ fontSize: '11px', marginTop: '4px', padding: '6px 8px', background: '#f9fafb', borderRadius: '6px', color: '#6b7280', fontFamily: 'monospace' }}>
+                      Before: {JSON.stringify(log.before)} → After: {JSON.stringify(log.after)}
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
+const s = {
+  page: { minHeight: '100vh', background: '#f5f7fa' },
+  header: { background: '#fff', padding: '1rem 2rem', borderBottom: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'sticky', top: 0, zIndex: 10 },
+  headerTitle: { fontSize: '20px', fontWeight: '600', color: '#1a1a1a' },
+  headerSub: { fontSize: '13px', color: '#6b7280', marginTop: '2px' },
+  body: { maxWidth: '960px', margin: '0 auto', padding: '2rem 1rem' },
+  statsRow: { display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: '1rem', marginBottom: '1.5rem' },
+  statCard: { background: '#fff', border: '1px solid #e5e7eb', borderRadius: '10px', padding: '1rem', textAlign: 'center' },
+  statVal: { fontSize: '26px', fontWeight: '600', color: '#1a1a1a' },
+  statLabel: { fontSize: '11px', color: '#6b7280', marginTop: '4px' },
+  grid3: { display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '1rem', marginBottom: '1.5rem' },
+  chartCard: { background: '#fff', border: '1px solid #e5e7eb', borderRadius: '10px', padding: '1.25rem', marginBottom: '1.5rem' },
+  tabs: { display: 'flex', gap: '4px', marginBottom: '1.5rem', borderBottom: '1px solid #e5e7eb' },
+  tab: { padding: '8px 16px', border: 'none', background: 'none', cursor: 'pointer', fontSize: '14px', color: '#6b7280', borderBottom: '2px solid transparent', marginBottom: '-1px' },
+  tabActive: { color: '#2563eb', borderBottom: '2px solid #2563eb', fontWeight: '500' },
+  sectionTitle: { fontSize: '16px', fontWeight: '600', marginBottom: '1rem', color: '#1a1a1a' },
+  userRow: { display: 'flex', gap: '12px', background: '#fff', border: '1px solid #e5e7eb', borderRadius: '10px', padding: '1rem', marginBottom: '0.75rem', alignItems: 'flex-start' },
+  avatar: { width: '36px', height: '36px', borderRadius: '50%', background: '#2563eb', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '600', fontSize: '15px', flexShrink: 0 },
+  progressBg: { height: '6px', background: '#e5e7eb', borderRadius: '3px', overflow: 'hidden' },
+  progressFill: { height: '100%', borderRadius: '3px', transition: 'width 0.3s' },
+  table: { width: '100%', borderCollapse: 'collapse', background: '#fff', borderRadius: '10px', overflow: 'hidden', border: '1px solid #e5e7eb', minWidth: '700px' },
+  thead: { background: '#f9fafb' },
+  th: { padding: '10px 12px', textAlign: 'left', fontSize: '12px', fontWeight: '600', color: '#6b7280', borderBottom: '1px solid #e5e7eb', whiteSpace: 'nowrap' },
+  tr: { borderBottom: '1px solid #f3f4f6' },
+  td: { padding: '10px 12px', fontSize: '13px', color: '#374151' },
+  memberCard: { display: 'flex', gap: '12px', background: '#fff', border: '1px solid #e5e7eb', borderRadius: '10px', padding: '1rem', marginBottom: '0.75rem' },
+  chip: { fontSize: '11px', padding: '2px 8px', borderRadius: '10px', fontWeight: '500' },
+  auditRow: { display: 'flex', gap: '12px', padding: '0.75rem 1rem', background: '#fff', border: '1px solid #e5e7eb', borderRadius: '10px', marginBottom: '0.6rem', alignItems: 'flex-start' },
+  auditDot: { width: '8px', height: '8px', borderRadius: '50%', background: '#7c3aed', marginTop: '5px', flexShrink: 0 },
+  btnExport: { padding: '8px 16px', background: '#16a34a', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: '500', fontSize: '14px' },
+  btnSecondary: { padding: '8px 16px', background: '#fff', color: '#374151', border: '1px solid #d1d5db', borderRadius: '6px', cursor: 'pointer', fontSize: '14px' },
+  btnAI: { padding: '5px 12px', background: '#7c3aed', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: '500' },
+  empty: { background: '#fff', border: '1px solid #e5e7eb', borderRadius: '10px', padding: '2rem', textAlign: 'center', color: '#6b7280' },
 }
