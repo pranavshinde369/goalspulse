@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { ToastProvider } from './components/Toast'
 import Login from './pages/Login'
 import EmployeeDashboard from './pages/EmployeeDashboard'
 import ManagerDashboard from './pages/ManagerDashboard'
@@ -13,20 +14,22 @@ const PrivateRoute = ({ children, roles }) => {
 
 export default function App() {
   return (
-    <BrowserRouter>
-      <Routes>
-        <Route path="/login" element={<Login />} />
-        <Route path="/employee" element={
-          <PrivateRoute roles={['EMPLOYEE']}><EmployeeDashboard /></PrivateRoute>
-        } />
-        <Route path="/manager" element={
-          <PrivateRoute roles={['MANAGER']}><ManagerDashboard /></PrivateRoute>
-        } />
-        <Route path="/admin" element={
-          <PrivateRoute roles={['ADMIN']}><AdminDashboard /></PrivateRoute>
-        } />
-        <Route path="*" element={<Navigate to="/login" />} />
-      </Routes>
-    </BrowserRouter>
+    <ToastProvider>
+      <BrowserRouter>
+        <Routes>
+          <Route path="/login" element={<Login />} />
+          <Route path="/employee" element={
+            <PrivateRoute roles={['EMPLOYEE']}><EmployeeDashboard /></PrivateRoute>
+          } />
+          <Route path="/manager" element={
+            <PrivateRoute roles={['MANAGER']}><ManagerDashboard /></PrivateRoute>
+          } />
+          <Route path="/admin" element={
+            <PrivateRoute roles={['ADMIN']}><AdminDashboard /></PrivateRoute>
+          } />
+          <Route path="*" element={<Navigate to="/login" />} />
+        </Routes>
+      </BrowserRouter>
+    </ToastProvider>
   )
 }
