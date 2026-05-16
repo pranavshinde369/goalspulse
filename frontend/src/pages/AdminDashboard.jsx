@@ -93,9 +93,9 @@ export default function AdminDashboard() {
   const handleExport = async () => {
     try {
       const token = localStorage.getItem('token')
-      const res = await fetch('http://localhost:4000/api/admin/report', {
-        headers: { Authorization: `Bearer ${token}` }
-      })
+      const res = await fetch(`${import.meta.env.VITE_API_URL}/admin/report`, {
+      api.defaults.headers.common['Authorization'] = `Bearer ${token}`
+      const res = await api.get('/admin/report', { responseType: 'blob' })
       const blob = await res.blob()
       const url = window.URL.createObjectURL(blob)
       const a = document.createElement('a')
