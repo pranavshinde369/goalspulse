@@ -93,16 +93,31 @@ export default function AdminDashboard() {
   const handleExport = async () => {
     try {
       const token = localStorage.getItem('token')
+      if (!token) throw new Error('No authentication token found')
+
       const res = await fetch(`${import.meta.env.VITE_API_URL}/admin/report`, {
-      api.defaults.headers.common['Authorization'] = `Bearer ${token}`
-      const res = await api.get('/admin/report', { responseType: 'blob' })
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      })
+
+      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`)
+
       const blob = await res.blob()
       const url = window.URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url; a.download = 'achievement_report.xlsx'
       document.body.appendChild(a); a.click(); a.remove()
+      
+      // Clean up the URL object to prevent memory leaks
+      window.URL.revokeObjectURL(url)
+      
       toast('Report downloaded!', 'success')
-    } catch (e) { toast('Export failed', 'error') }
+    } catch (e) { 
+      console.error('Export error:', e)
+      toast('Export failed', 'error') 
+    }
   }
 
   const handleReset = async () => {
