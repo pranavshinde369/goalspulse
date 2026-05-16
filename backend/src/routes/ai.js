@@ -7,7 +7,7 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY)
 router.post('/suggest-goal', authenticate, async (req, res) => {
   try {
     const { thrustArea, description } = req.body
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' })
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' })
 
     const prompt = `You are an HR performance management expert. 
 A ${thrustArea} professional wants to set a work goal.
@@ -30,7 +30,7 @@ Example: ["Goal 1 text", "Goal 2 text", "Goal 3 text"]`
 router.post('/appraisal-summary', authenticate, async (req, res) => {
   try {
     const { employeeName, goals } = req.body
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' })
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' })
 
     const goalSummary = goals.map(g =>
       `- ${g.title} (${g.thrustArea}, ${g.uomType}, target: ${g.target}, progress: ${g.progressPct != null ? Math.round(g.progressPct)+'%' : 'not started'}, status: ${g.status})`
