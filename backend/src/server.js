@@ -2,20 +2,24 @@ const express = require('express')
 const cors = require('cors')
 require('dotenv').config()
 
-const aiRoutes = require('./routes/ai')
-
-
 const authRoutes = require('./routes/auth')
 const goalRoutes = require('./routes/goals')
 const adminRoutes = require('./routes/admin')
+const aiRoutes = require('./routes/ai')
 
 const app = express()
-app.use(cors())
+
+app.use(cors({
+  origin: '*',
+  credentials: false
+}))
+
 app.use(express.json())
-app.use('/api/ai', aiRoutes)
+
 app.use('/api/auth', authRoutes)
 app.use('/api/goals', goalRoutes)
 app.use('/api/admin', adminRoutes)
+app.use('/api/ai', aiRoutes)
 
 app.get('/', (req, res) => res.json({ status: 'GoalsPulse API running' }))
 
