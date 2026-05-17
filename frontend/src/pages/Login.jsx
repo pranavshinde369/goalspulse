@@ -19,8 +19,21 @@ export default function Login() {
       if (role === 'EMPLOYEE') navigate('/employee')
       else if (role === 'MANAGER') navigate('/manager')
       else if (role === 'ADMIN') navigate('/admin')
-    } catch (e) {
-      setError('Invalid email or password')
+    } catch (err) {
+      if (err.response) {
+        // The server responded with a status code that falls out of the range of 2xx
+        if (err.response.status === 401 || err.response.status === 404) {
+          setError(err.response.data?.error || 'Invalid email or password')
+        } else {
+          setError(err.response.data?.error || 'Server error, please try again later.')
+        }
+      } else if (err.request) {
+        // The request was made but no response was received
+        setError('Cannot connect to server. Please verify the backend is running locally on port 4000.')
+      } else {
+        // Something happened in setting up the request that triggered an Error
+        setError(err.message || 'An unexpected error occurred.')
+      }
     }
   }
 
