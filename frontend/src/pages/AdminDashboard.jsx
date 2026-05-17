@@ -93,6 +93,8 @@ export default function AdminDashboard() {
   const handleExport = async () => {
     try {
       const token = localStorage.getItem('token')
+      const res = await fetch(`${import.meta.env.VITE_API_URL}/admin/report`, {
+        headers: { Authorization: `Bearer ${token}` }
       if (!token) throw new Error('No authentication token found')
 
       const res = await fetch(`${import.meta.env.VITE_API_URL}/admin/report`, {
