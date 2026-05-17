@@ -10,12 +10,8 @@ const aiRoutes = require('./routes/ai')
 const app = express()
 
 app.use(cors({
-  origin: [
-    
-    'https://goalspulse-zze6.vercel.app',  // replace with your actual Vercel URL
-    /\.vercel\.app$/  // allows all vercel preview URLs
-  ],
-  credentials: true
+  origin: '*',
+  credentials: false
 }))
 
 app.use(express.json())
