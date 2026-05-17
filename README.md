@@ -468,3 +468,6 @@ models/gemini-2.5-flash-native-audio-latest
 models/gemini-2.5-flash-native-audio-preview-09-2025
 models/gemini-2.5-flash-native-audio-preview-12-2025
 models/gemini-3.1-flash-live-preview
+
+
+'http://localhost:5173',

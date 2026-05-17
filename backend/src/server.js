@@ -11,7 +11,7 @@ const app = express()
 
 app.use(cors({
   origin: [
-    'http://localhost:5173',
+    
     'https://goalspulse-zze6.vercel.app',  // replace with your actual Vercel URL
     /\.vercel\.app$/  // allows all vercel preview URLs
   ],
